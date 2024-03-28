@@ -1,0 +1,179 @@
+buildscript {
+	repositories {
+		mavenCentral()
+		//Needed only for SNAPSHOT versions
+		//maven { url 'https://oss.sonatype.org/content/repositories/snapshots/' }
+	}
+	dependencies {
+		classpath 'info.solidsoft.gradle.pitest:gradle-pitest-plugin:1.5.2'
+		classpath "org.openapitools:openapi-generator-gradle-plugin:6.6.0"
+	}
+}
+
+plugins {
+	id 'org.springframework.boot' version '2.3.5.RELEASE'
+	id 'io.spring.dependency-management' version '1.0.10.RELEASE'
+	id 'java'
+	// Test coverage
+	id 'jacoco'
+
+	// Code style
+	id 'checkstyle'
+
+	// PMD
+	id 'pmd'
+
+	// PITest
+	id 'info.solidsoft.pitest' version '1.5.2'
+
+	// OpenAPI
+	id 'org.openapi.generator' version '4.3.1'
+}
+
+group = 'vnct.projects.financiall'
+version = '0.0.1-SNAPSHOT'
+sourceCompatibility = 15
+targetCompatibility = 15
+
+repositories {
+	mavenCentral()
+	// Necessary for WireMock setup
+	maven { url 'https://jitpack.io' }
+	maven { url "https://repository.mulesoft.org/nexus/content/repositories/public/" }
+}
+
+dependencies {
+
+	compileOnly 'org.projectlombok:lombok:1.18.24'
+	annotationProcessor 'org.projectlombok:lombok:1.18.24'
+
+	implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+
+	implementation 'org.springframework.boot:spring-boot-starter'
+	//implementation 'org.springframework.boot:spring-boot-starter-security'
+	implementation 'org.springframework.boot:spring-boot-starter-web'
+	// https://mvnrepository.com/artifact/io.jsonwebtoken/jjwt
+	implementation 'io.jsonwebtoken:jjwt:0.9.1'
+
+
+	implementation 'io.swagger.core.v3:swagger-annotations:2.1.11' // Use the latest version available
+	implementation 'javax.validation:validation-api:2.0.1.Final' // Use the latest version available
+
+	// Hibernate Validator - One of the Bean Validation Implementations
+	implementation 'org.hibernate:hibernate-validator:6.1.7.Final' // Use the latest version available
+
+	implementation "org.springdoc:springdoc-openapi-starter-webmvc-ui:2.1.0"
+	implementation "io.swagger.core.v3:swagger-annotations:2.2.15"
+
+	// Local test database (in-memory)
+	implementation 'com.h2database:h2'
+	developmentOnly 'org.hibernate:hibernate-entitymanager'
+
+	implementation 'org.springdoc:springdoc-openapi-ui:1.6.5'
+
+	testImplementation('org.springframework.boot:spring-boot-starter-test') {
+		exclude group: 'org.junit.vintage', module: 'junit-vintage-engine'
+	}
+	testImplementation('org.junit.jupiter:junit-jupiter:5.8.2')
+	testImplementation group: 'org.mockito', name: 'mockito-core', version: '3.12.4'
+	testImplementation('org.assertj:assertj-core:3.23.1')
+
+	//WireMock for jUnit 5
+	testImplementation "com.github.tomakehurst:wiremock-jre8-standalone:2.24.1"
+	testImplementation "com.github.JensPiegsa:wiremock-extension:0.4.0"
+
+}
+
+test {
+	useJUnitPlatform()
+	jacoco {
+		enabled = true
+		includes = ['vnct.projects.financiall.*']
+		excludes = []
+	}
+}
+
+repositories {
+	mavenCentral()
+}
+
+jacoco {
+	toolVersion = "0.8.7" // Use the desired version of JaCoCo
+}
+
+jacocoTestCoverageVerification() {
+	dependsOn test
+	violationRules {
+		rule {
+			enabled = true
+			element = 'CLASS'
+			includes = ['vnct.projects.financiall.*']
+
+			limit {
+				counter = 'BRANCH'
+				value = 'COVEREDRATIO'
+				minimum = 0.0
+			}
+		}
+	}
+}
+
+checkstyle {
+	toolVersion "8.37"
+	configFile = file("${rootDir}/config/checkstyle.xml")
+	ignoreFailures = false
+	maxErrors = 0
+	maxWarnings = 0
+}
+
+checkstyleMain.source = '/src/main/java'
+
+pmd {
+	ignoreFailures = false
+	incrementalAnalysis = true
+	sourceSets = [sourceSets.main]
+}
+
+pmdMain.source = '/src/main/java'
+
+apply plugin: 'info.solidsoft.pitest'
+pitest {
+	//adds dependency to org.pitest:pitest-junit5-plugin and sets "testPlugin" to "junit5"
+	junit5PluginVersion = '0.12'
+
+	targetClasses = ['vnct.projects.financiall.*']  //by default "${project.group}.*"
+	excludedClasses = ['vnct.projects.financiall.api', 'vnct.projects.financiall.model']
+	pitestVersion = '1.5.1' //not needed when a default PIT version should be used
+	threads = 4
+	outputFormats = ['XML', 'HTML']
+	timestampedReports = false
+}
+
+
+apply plugin: 'org.openapi.generator'
+openApiGenerate {
+	generatorName.set("spring")
+	inputSpec.set("$rootDir/config/api.yaml")
+	outputDir.set("$buildDir/generated")
+	apiPackage.set("vnct.projects.financiall.api")
+	modelPackage.set("vnct.projects.financiall.model")
+	configOptions.set([
+			dateLibrary: "java15"
+	])
+
+	// Exclude controller generation
+	configOptions = [
+			interfaceOnly: 'true',
+			openApiNullable: "false"
+	]
+}
+
+compileJava.dependsOn tasks.named("openApiGenerate")
+
+sourceSets {
+	getByName("main") {
+		java {
+			srcDir("$buildDir/generated/src/main/java")
+		}
+	}
+}
